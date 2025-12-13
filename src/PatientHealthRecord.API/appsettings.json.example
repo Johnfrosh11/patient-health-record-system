@@ -1,0 +1,48 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=phr_db;Username=postgres;Password=your_password_here"
+  },
+  "JwtSettings": {
+    "SecretKey": "your-very-secure-secret-key-must-be-at-least-32-characters-long-for-hs256",
+    "Issuer": "PatientHealthRecordAPI",
+    "Audience": "PatientHealthRecordClient",
+    "AccessTokenExpirationMinutes": 30,
+    "RefreshTokenExpirationDays": 7
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore": "Information"
+    }
+  },
+  "AllowedHosts": "*",
+  "CorsOrigins": [
+    "http://localhost:3000",
+    "http://localhost:4200"
+  ],
+  "Serilog": {
+    "Using": [ "Serilog.Sinks.Console", "Serilog.Sinks.File" ],
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "System": "Warning"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "Console"
+      },
+      {
+        "Name": "File",
+        "Args": {
+          "path": "logs/log-.txt",
+          "rollingInterval": "Day",
+          "retainedFileCountLimit": 7
+        }
+      }
+    ],
+    "Enrich": [ "FromLogContext", "WithMachineName", "WithThreadId" ]
+  }
+}

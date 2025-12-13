@@ -1,0 +1,24 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=phr_db;Username=your_username;Password=your_password"
+  },
+  "JwtSettings": {
+    "SecretKey": "REPLACE-THIS-WITH-YOUR-OWN-256-BIT-SECRET-KEY-MINIMUM-32-CHARACTERS-LONG",
+    "Issuer": "PatientHealthRecordAPI",
+    "Audience": "PatientHealthRecordClient",
+    "AccessTokenExpirationMinutes": 30,
+    "RefreshTokenExpirationDays": 7
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore": "Information"
+    }
+  },
+  "AllowedHosts": "*",
+  "CorsOrigins": [
+    "http://localhost:3000",
+    "http://localhost:4200"
+  ]
+}

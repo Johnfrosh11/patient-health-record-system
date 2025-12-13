@@ -1,0 +1,1436 @@
+{
+  "info": {
+    "name": "Patient Health Record API",
+    "description": "Complete API collection for Patient Health Record System - Interswitch Technical Assessment\n\n**Setup Instructions:**\n1. Import this collection into Postman\n2. Create an environment with the variable `baseUrl` set to `http://localhost:5243`\n3. Run requests in order to test the complete flow\n4. Authentication tokens are automatically saved to environment variables\n\n**Test Users (Password: Test@123 for all):**\n- admin / admin@phr.com - Full system access\n- doctor / doctor@phr.com - View all records, create/update records\n- nurse / nurse@phr.com - View records, request access\n- receptionist / receptionist@phr.com - Create records, request access",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "patient-health-record"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request script",
+          "// This runs before each request in the collection"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script",
+          "// This runs after each request in the collection"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Register New User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has user details\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('userId');",
+                  "    pm.expect(jsonData).to.have.property('username');",
+                  "    pm.expect(jsonData).to.have.property('email');",
+                  "});",
+                  "",
+                  "// Note: Registration doesn't auto-login for security",
+                  "// Tokens will be empty - need to login separately"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser\",\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test@123\",\n  \"confirmPassword\": \"Test@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user account. Password must be at least 8 characters with uppercase, lowercase, and number."
+          },
+          "response": []
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains tokens\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('accessToken');",
+                  "    pm.expect(jsonData).to.have.property('refreshToken');",
+                  "    pm.expect(jsonData).to.have.property('userId');",
+                  "    ",
+                  "    // Save tokens to environment",
+                  "    pm.environment.set('accessToken', jsonData.accessToken);",
+                  "    pm.environment.set('refreshToken', jsonData.refreshToken);",
+                  "    pm.environment.set('userId', jsonData.userId);",
+                  "    ",
+                  "    console.log('✅ Logged in as admin');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"Test@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login with admin credentials. Tokens are automatically saved to environment variables."
+          },
+          "response": []
+        },
+        {
+          "name": "Login (Doctor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "pm.environment.set('accessToken', jsonData.accessToken);",
+                  "pm.environment.set('refreshToken', jsonData.refreshToken);",
+                  "pm.environment.set('userId', jsonData.userId);",
+                  "console.log('✅ Logged in as doctor');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"doctor\",\n  \"password\": \"Test@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"User has roles and permissions\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('roles');",
+                  "    pm.expect(jsonData).to.have.property('permissions');",
+                  "    pm.expect(jsonData.roles).to.be.an('array');",
+                  "    pm.expect(jsonData.permissions).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Get details of currently authenticated user including roles and permissions."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"New tokens received\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('accessToken');",
+                  "    pm.expect(jsonData).to.have.property('refreshToken');",
+                  "    ",
+                  "    // Update tokens",
+                  "    pm.environment.set('accessToken', jsonData.accessToken);",
+                  "    pm.environment.set('refreshToken', jsonData.refreshToken);",
+                  "    ",
+                  "    console.log('✅ Tokens refreshed');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "refresh"]
+            },
+            "description": "Refresh access token using refresh token. Old tokens are revoked."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "// Clear tokens from environment",
+                  "pm.environment.unset('accessToken');",
+                  "pm.environment.unset('refreshToken');",
+                  "pm.environment.unset('userId');",
+                  "console.log('✅ Logged out and tokens cleared');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout and revoke refresh token. Clears tokens from environment."
+          },
+          "response": []
+        }
+      ],
+      "description": "Authentication endpoints for user registration, login, token refresh, and logout."
+    },
+    {
+      "name": "2. Health Records",
+      "item": [
+        {
+          "name": "Get All Health Records",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has pagination\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('items');",
+                  "    pm.expect(jsonData).to.have.property('page');",
+                  "    pm.expect(jsonData).to.have.property('totalCount');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/patient-records?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patient-records"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get all health records with pagination. Requires 'View All Patient Records' permission (Admin, Doctor)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Health Record by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Record has required fields\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('patientName');",
+                  "    pm.expect(jsonData).to.have.property('diagnosis');",
+                  "    pm.expect(jsonData).to.have.property('treatment');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/patient-records/{{recordId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patient-records", "{{recordId}}"]
+            },
+            "description": "Get specific health record by ID. Access control applies based on user permissions."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Health Records",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Returns array of records\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/patient-records/my-records",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patient-records", "my-records"]
+            },
+            "description": "Get all health records created by the current user."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Health Record",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Record created with ID\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    ",
+                  "    // Save record ID for future requests",
+                  "    pm.environment.set('recordId', jsonData.id);",
+                  "    console.log('✅ Health record created:', jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientName\": \"John Doe\",\n  \"dateOfBirth\": \"1990-05-15\",\n  \"gender\": \"Male\",\n  \"diagnosis\": \"Hypertension\",\n  \"treatment\": \"Prescribed Amlodipine 5mg once daily\",\n  \"notes\": \"Patient advised to monitor blood pressure regularly and maintain low-sodium diet.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/patient-records",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patient-records"]
+            },
+            "description": "Create a new health record. Requires 'Create Patient Record' permission."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Health Record",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Record updated\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('updatedAt');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnosis\": \"Hypertension - Stage 1\",\n  \"treatment\": \"Prescribed Amlodipine 10mg once daily (increased dosage)\",\n  \"notes\": \"Follow-up in 2 weeks to check blood pressure response to increased medication.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/patient-records/{{recordId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patient-records", "{{recordId}}"]
+            },
+            "description": "Update existing health record. Requires 'Update Patient Record' permission."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Health Record",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "console.log('✅ Health record deleted (soft delete)');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/patient-records/{{recordId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patient-records", "{{recordId}}"]
+            },
+            "description": "Soft delete health record. Requires 'Delete Patient Record' permission. Record is marked as deleted but not removed from database."
+          },
+          "response": []
+        }
+      ],
+      "description": "Health record management endpoints with access control and audit trail."
+    },
+    {
+      "name": "3. Access Requests",
+      "item": [
+        {
+          "name": "Get All Access Requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has pagination\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('items');",
+                  "    pm.expect(jsonData).to.have.property('totalCount');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/access-requests?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "access-requests"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get all access requests with pagination. Returns only requests created by current user unless admin."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Access Request by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Request has status and dates\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('requestedAt');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/access-requests/{{accessRequestId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "access-requests", "{{accessRequestId}}"]
+            },
+            "description": "Get specific access request by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pending Access Requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"All requests are pending\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "    jsonData.forEach(request => {",
+                  "        pm.expect(request.status).to.equal('Pending');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/access-requests/pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "access-requests", "pending"]
+            },
+            "description": "Get all pending access requests. Useful for approval workflows."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Access Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Request created with ID\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData.status).to.equal('Pending');",
+                  "    ",
+                  "    // Save request ID",
+                  "    pm.environment.set('accessRequestId', jsonData.id);",
+                  "    console.log('✅ Access request created:', jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"healthRecordId\": \"{{recordId}}\",\n  \"reason\": \"Need to review patient medical history for consultation\",\n  \"requestedFrom\": \"2024-12-13T10:00:00Z\",\n  \"requestedTo\": \"2024-12-15T18:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/access-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "access-requests"]
+            },
+            "description": "Create time-bound access request for a health record. Cannot request access to own records."
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Access Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Request approved\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.equal('Approved');",
+                  "    pm.expect(jsonData).to.have.property('approvedAt');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grantedFrom\": \"2024-12-13T10:00:00Z\",\n  \"grantedTo\": \"2024-12-15T18:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/access-requests/{{accessRequestId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "access-requests", "{{accessRequestId}}", "approve"]
+            },
+            "description": "Approve access request with time boundaries. Requires 'Approve Access Request' permission."
+          },
+          "response": []
+        },
+        {
+          "name": "Decline Access Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Request declined\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.equal('Declined');",
+                  "    pm.expect(jsonData).to.have.property('reviewedAt');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Insufficient justification for access request\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/access-requests/{{accessRequestId}}/decline",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "access-requests", "{{accessRequestId}}", "decline"]
+            },
+            "description": "Decline access request with reason. Requires 'Approve Access Request' permission."
+          },
+          "response": []
+        }
+      ],
+      "description": "Time-bound access request management for health records."
+    },
+    {
+      "name": "4. User Management (Admin)",
+      "item": [
+        {
+          "name": "Get All Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has pagination\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('items');",
+                  "    pm.expect(jsonData).to.have.property('page');",
+                  "    pm.expect(jsonData).to.have.property('totalCount');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get all users with pagination. Requires 'Manage Users' permission (Admin only)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"User has roles and permissions\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('roles');",
+                  "    pm.expect(jsonData).to.have.property('permissions');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{targetUserId}}"]
+            },
+            "description": "Get user details by ID including roles and permissions."
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"User created with ID\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    ",
+                  "    // Save user ID",
+                  "    pm.environment.set('targetUserId', jsonData.id);",
+                  "    console.log('✅ User created:', jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newstaff\",\n  \"email\": \"newstaff@phr.com\",\n  \"password\": \"Staff@123\",\n  \"firstName\": \"New\",\n  \"lastName\": \"Staff\",\n  \"roleIds\": [\"{{nurseRoleId}}\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"]
+            },
+            "description": "Create new user with roles. Requires 'Manage Users' permission (Admin only)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"User updated\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('lastModifiedDate');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newstaff.updated@phr.com\",\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Staff\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{targetUserId}}"]
+            },
+            "description": "Update user details. Requires 'Manage Users' permission."
+          },
+          "response": []
+        },
+        {
+          "name": "Activate User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"User activated\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.isActive).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{targetUserId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{targetUserId}}", "activate"]
+            },
+            "description": "Activate user account."
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "console.log('✅ User deactivated');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{targetUserId}}/deactivate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{targetUserId}}", "deactivate"]
+            },
+            "description": "Deactivate user account (soft delete)."
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Role to User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "console.log('✅ Role assigned to user');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{targetUserId}}/roles/{{doctorRoleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{targetUserId}}", "roles", "{{doctorRoleId}}"]
+            },
+            "description": "Assign role to user."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Role from User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "console.log('✅ Role removed from user');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{targetUserId}}/roles/{{doctorRoleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{targetUserId}}", "roles", "{{doctorRoleId}}"]
+            },
+            "description": "Remove role from user. Users must have at least one role."
+          },
+          "response": []
+        }
+      ],
+      "description": "User management endpoints for administrators. All require 'Manage Users' permission."
+    },
+    {
+      "name": "5. Role Management (Admin)",
+      "item": [
+        {
+          "name": "Get All Roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Returns array of roles\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "    ",
+                  "    // Save role IDs for future use",
+                  "    jsonData.forEach(role => {",
+                  "        if (role.name === 'Doctor') {",
+                  "            pm.environment.set('doctorRoleId', role.id);",
+                  "        } else if (role.name === 'Nurse') {",
+                  "            pm.environment.set('nurseRoleId', role.id);",
+                  "        }",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "roles"]
+            },
+            "description": "Get all roles with permissions. Requires 'Manage Roles' permission (Admin only)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Returns array of permissions\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "    ",
+                  "    // Save some permission IDs",
+                  "    if (jsonData.length > 0) {",
+                  "        pm.environment.set('permissionId', jsonData[0].id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "roles", "permissions"]
+            },
+            "description": "Get all available permissions in the system."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Role by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Role has permissions and user count\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('permissions');",
+                  "    pm.expect(jsonData).to.have.property('userCount');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/{{targetRoleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "roles", "{{targetRoleId}}"]
+            },
+            "description": "Get role details by ID including permissions and user count."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Role created with ID\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    ",
+                  "    // Save role ID",
+                  "    pm.environment.set('targetRoleId', jsonData.id);",
+                  "    console.log('✅ Role created:', jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lab Technician\",\n  \"description\": \"Medical laboratory staff\",\n  \"permissionIds\": [\"{{permissionId}}\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "roles"]
+            },
+            "description": "Create new role with permissions. Requires 'Manage Roles' permission."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Role updated\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.name).to.not.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lab Technician\",\n  \"description\": \"Medical laboratory staff with updated permissions\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/{{targetRoleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "roles", "{{targetRoleId}}"]
+            },
+            "description": "Update role details. Requires 'Manage Roles' permission."
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Permission to Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "console.log('✅ Permission assigned to role');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/{{targetRoleId}}/permissions/{{permissionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "roles", "{{targetRoleId}}", "permissions", "{{permissionId}}"]
+            },
+            "description": "Assign permission to role."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Permission from Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "console.log('✅ Permission removed from role');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/{{targetRoleId}}/permissions/{{permissionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "roles", "{{targetRoleId}}", "permissions", "{{permissionId}}"]
+            },
+            "description": "Remove permission from role. Roles must have at least one permission."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "console.log('✅ Role deleted');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/{{targetRoleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "roles", "{{targetRoleId}}"]
+            },
+            "description": "Delete role. Cannot delete role if users are assigned to it."
+          },
+          "response": []
+        }
+      ],
+      "description": "Role and permission management endpoints for administrators. All require 'Manage Roles' permission."
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5243",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "recordId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessRequestId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "targetUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "targetRoleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "doctorRoleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nurseRoleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "permissionId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

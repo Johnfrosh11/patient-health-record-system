@@ -66,9 +66,11 @@ PatientHealthRecord/
 ### 1. Clone Repository
 
 ```bash
-git clone <your-repo-url>
-cd "Patient Health Record System"
+git clone https://github.com/YOUR_USERNAME/patient-health-record-system.git
+cd patient-health-record-system
 ```
+
+> **Note**: Replace `YOUR_USERNAME` with your actual GitHub username after creating the repository.
 
 ### 2. Database Setup
 
@@ -594,13 +596,44 @@ A comprehensive Postman collection with **47 endpoints** is included:
 
 ## License
 
-This project is developed as a technical assessment for Interswitch.
+This project is developed as a technical assessment for **Interswitch - Software Engineer (Health .NET)**.
 
 ---
 
-## Contact
+## Author
 
-For questions or issues, please contact the development team.
+**Technical Assessment Submission**  
+Date: December 2025
+
+---
+
+## Quick Start Summary
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/YOUR_USERNAME/patient-health-record-system.git
+
+# 2. Navigate to project
+cd patient-health-record-system
+
+# 3. Copy configuration
+cp appsettings.json.example src/PatientHealthRecord.API/appsettings.json
+# Edit appsettings.json with your PostgreSQL credentials
+
+# 4. Run migrations
+cd src/PatientHealthRecord.Infrastructure
+dotnet ef database update --startup-project ../PatientHealthRecord.API
+
+# 5. Start the API
+cd ../PatientHealthRecord.API
+dotnet run
+
+# 6. Open Swagger UI
+# Navigate to: http://localhost:5243/swagger
+
+# 7. Login with test credentials
+# Username: admin | Password: Admin@123
+```
 
 ---
 

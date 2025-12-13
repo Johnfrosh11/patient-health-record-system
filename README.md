@@ -148,7 +148,34 @@ Open your browser and navigate to:
 http://localhost:5243/swagger
 ```
 
-### 7. Run Unit Tests
+### 7. Swagger Authentication
+
+To test protected endpoints in Swagger UI:
+
+1. **Login first**: Execute `POST /api/v1/auth/login` with credentials:
+   ```json
+   {
+     "username": "admin",
+     "password": "Admin@123"
+   }
+   ```
+
+2. **Copy the access token** from the response (the `accessToken` field)
+
+3. **Click the "Authorize" button** (🔓 lock icon at top right)
+
+4. **Enter ONLY the token** (without "Bearer " prefix):
+   ```
+   eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
+   ```
+   
+   > ⚠️ **Important**: Do NOT include "Bearer " - Swagger adds it automatically!
+
+5. **Click "Authorize"** then **"Close"**
+
+6. Now all protected endpoints will include your token automatically
+
+### 8. Run Unit Tests
 
 ```bash
 cd ../../tests/PatientHealthRecord.Tests

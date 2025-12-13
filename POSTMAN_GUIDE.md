@@ -11,6 +11,18 @@ Comprehensive Postman collection for testing the Patient Health Record System AP
 - ✅ **Complete Workflows** - Login → Create → Update → Delete flows
 - ✅ **Pre-configured Test Data** - Matching seeded database users
 
+## Authorization Notes
+
+### Swagger UI vs Postman
+
+| Tool | How to Enter Token |
+|------|-------------------|
+| **Swagger UI** | Enter token ONLY (without "Bearer " prefix) - Swagger adds it automatically |
+| **Postman** | Use "Bearer Token" auth type - Postman adds "Bearer " automatically |
+| **Manual Header** | Add full header: `Authorization: Bearer <your-token>` |
+
+> ⚠️ **Common Mistake**: Adding "Bearer " prefix in Swagger UI results in `Bearer Bearer <token>` which fails!
+
 ## Quick Start
 
 ### 1. Import Collection

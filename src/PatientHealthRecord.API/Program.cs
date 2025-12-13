@@ -151,7 +151,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter 'Bearer' [space] and then your valid JWT token."
+        Description = "JWT Authorization header. Enter your token ONLY (without 'Bearer ' prefix). The 'Bearer ' prefix is added automatically."
     });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement

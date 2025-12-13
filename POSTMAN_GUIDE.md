@@ -111,14 +111,12 @@ These variables are automatically populated by test scripts:
 
 ## Test Users
 
-All test users have password: **Test@123**
-
-| Username | Email | Roles | Permissions |
-|----------|-------|-------|-------------|
-| admin | admin@phr.com | Administrator | Full system access |
-| doctor | doctor@phr.com | Doctor | View all records, Create/Update/Delete records |
-| nurse | nurse@phr.com | Nurse | View own records, Request access |
-| receptionist | receptionist@phr.com | Receptionist | Create records, Request access |
+| Username | Password | Email | Roles | Permissions |
+|----------|----------|-------|-------|-------------|
+| admin | Admin@123 | admin@phr.com | Administrator | Full system access |
+| doctor | Doctor@123 | doctor@phr.com | Doctor | View all records, Create/Update/Delete records |
+| nurse | Nurse@123 | nurse@phr.com | Nurse | View own records, Request access |
+| receptionist | Reception@123 | receptionist@phr.com | Receptionist | Create records, Request access |
 
 ## Example Workflows
 
@@ -257,6 +255,6 @@ dotnet run
 
 ---
 
-**Created for**: Interswitch Technical Assessment  
+**Created for**: Interswitch Technical Assessment - Software Engineer (Health .NET)  
 **Version**: 1.0.0  
-**Last Updated**: December 13, 2024
+**Last Updated**: December 13, 2025

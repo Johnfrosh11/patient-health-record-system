@@ -1,15 +1,25 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using PatientHealthRecord.Domain.Entities;
 using PatientHealthRecord.Domain.Enums;
 using System.Reflection;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace PatientHealthRecord.Infrastructure.Data;
 
 public class ApplicationDbContext : DbContext
 {
+    private readonly IHttpContextAccessor? _httpContextAccessor;
+
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
     {
+    }
+
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IHttpContextAccessor httpContextAccessor) 
+        : base(options)
+    {
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public DbSet<User> Users { get; set; }
@@ -73,16 +83,24 @@ public class ApplicationDbContext : DbContext
         var entityName = entry.Entity.GetType().Name;
         var entityId = entry.Properties.FirstOrDefault(p => p.Metadata.IsPrimaryKey())?.CurrentValue?.ToString();
 
+        // Get user info from HttpContext
+        var httpContext = _httpContextAccessor?.HttpContext;
+        var userId = httpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var username = httpContext?.User.FindFirst(ClaimTypes.Name)?.Value;
+        var email = httpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+        var ipAddress = httpContext?.Connection.RemoteIpAddress?.ToString();
+        var userAgent = httpContext?.Request.Headers["User-Agent"].ToString();
+
         var auditLog = new AuditLog
         {
             Action = action,
             EntityName = entityName,
             EntityId = entityId,
             Timestamp = DateTime.UtcNow,
-            UserId = null,
-            Username = null,
-            IpAddress = null,
-            UserAgent = null
+            UserId = !string.IsNullOrEmpty(userId) ? Guid.Parse(userId) : null,
+            Username = username ?? email,
+            IpAddress = ipAddress,
+            UserAgent = userAgent
         };
 
         if (action == AuditAction.Update)

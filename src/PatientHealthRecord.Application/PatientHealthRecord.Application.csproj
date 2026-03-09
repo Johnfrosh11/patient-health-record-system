@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PatientHealthRecord.Domain\PatientHealthRecord.Domain.csproj" />
+    <ProjectReference Include="..\PatientHealthRecord.Repository\PatientHealthRecord.Repository.csproj" />
+    <ProjectReference Include="..\PatientHealthRecord.Utilities\PatientHealthRecord.Utilities.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -9,7 +11,12 @@
     <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="12.0.1" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="FluentValidation" Version="12.1.1" />
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.2.1" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.2.1" />
   </ItemGroup>
 
   <PropertyGroup>

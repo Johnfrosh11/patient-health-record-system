@@ -1,137 +1,62 @@
-using Asp.Versioning;
-using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PatientHealthRecord.Application.Common.Interfaces;
 using PatientHealthRecord.Application.DTOs.AccessRequests;
+using PatientHealthRecord.Application.Services.AccessRequests;
 using PatientHealthRecord.Domain.Constants;
-using PatientHealthRecord.Domain.Enums;
-using Swashbuckle.AspNetCore.Annotations;
+using PatientHealthRecord.Utilities;
 
 namespace PatientHealthRecord.API.Controllers;
 
+/// <summary>
+/// Access Requests controller - time-bound access to health records
+/// </summary>
+[Route("api/v1/[controller]")]
+[ApiController]
 [Authorize]
-[ApiVersion("1.0")]
-[Route("api/v{version:apiVersion}/access-requests")]
-public class AccessRequestsController : BaseController
+public sealed class AccessRequestsController(IAccessRequestService svc) : BaseController
 {
-    private readonly IAccessRequestService _accessRequestService;
-    private readonly IAuditService _auditService;
-    private readonly IValidator<CreateAccessRequestRequest> _createValidator;
-    private readonly IValidator<ApproveAccessRequestRequest> _approveValidator;
-    private readonly IValidator<DeclineAccessRequestRequest> _declineValidator;
-
-    public AccessRequestsController(
-        IAccessRequestService accessRequestService,
-        IAuditService auditService,
-        IValidator<CreateAccessRequestRequest> createValidator,
-        IValidator<ApproveAccessRequestRequest> approveValidator,
-        IValidator<DeclineAccessRequestRequest> declineValidator)
-    {
-        _accessRequestService = accessRequestService;
-        _auditService = auditService;
-        _createValidator = createValidator;
-        _approveValidator = approveValidator;
-        _declineValidator = declineValidator;
-    }
-
+    /// <summary>
+    /// Get all access requests (user sees their own, approvers see pending for review)
+    /// </summary>
     [HttpGet]
-    [SwaggerOperation(Summary = "Get all access requests")]
-    public async Task<IActionResult> GetAll()
-    {
-        var userId = GetCurrentUserId();
-        
-        var hasApprovePermission = User.Claims
-            .Where(c => c.Type == "permission")
-            .Any(c => c.Value == Permissions.ApproveAccessRequests);
-        
-        var response = await _accessRequestService.GetAllAsync(userId, hasApprovePermission);
-        return Response(response);
-    }
+    public async Task<IActionResult> GetAll([FromQuery] bool isApprover = false, CancellationToken ct = default)
+        => Ok(await svc.GetAllAsync(GetCurrentUserId(), isApprover, ct));
 
+    /// <summary>
+    /// Get access request by ID
+    /// </summary>
     [HttpGet("{id:guid}")]
-    [SwaggerOperation(Summary = "Get access request by ID")]
-    public async Task<IActionResult> GetById(Guid id)
-    {
-        var userId = GetCurrentUserId();
-        var response = await _accessRequestService.GetByIdAsync(id, userId);
-        return Response(response);
-    }
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)
+        => Ok(await svc.GetByIdAsync(id, GetCurrentUserId(), ct));
 
+    /// <summary>
+    /// Get pending access requests for approval (requires approveAccessRequests permission)
+    /// </summary>
     [HttpGet("pending")]
-    [SwaggerOperation(Summary = "Get all pending access requests")]
     [Authorize(Policy = Permissions.ApproveAccessRequests)]
-    public async Task<IActionResult> GetPending()
-    {
-        var userId = GetCurrentUserId();
-        var response = await _accessRequestService.GetPendingAsync(userId);
-        return Response(response);
-    }
+    public async Task<IActionResult> GetPending(CancellationToken ct = default)
+        => Ok(await svc.GetPendingAsync(GetCurrentUserId(), ct));
 
+    /// <summary>
+    /// Create a new access request for a health record
+    /// </summary>
     [HttpPost]
-    [SwaggerOperation(Summary = "Create a new access request")]
-    public async Task<IActionResult> Create([FromBody] CreateAccessRequestRequest request)
-    {
-        var validationResult = await _createValidator.ValidateAsync(request);
-        if (!validationResult.IsValid)
-        {
-            foreach (var error in validationResult.Errors)
-            {
-                ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
-            }
-            return NotifyModelStateError();
-        }
+    public async Task<IActionResult> Create([FromBody] CreateAccessRequestRequest request, CancellationToken ct = default)
+        => Ok(await svc.CreateAsync(request, GetCurrentUserId(), ct));
 
-        var userId = GetCurrentUserId();
-        var response = await _accessRequestService.CreateAsync(request, userId);
-        return CreatedAtAction(nameof(GetById), new { id = response.Id }, response);
-    }
-
-    [HttpPut("{id:guid}/approve")]
-    [SwaggerOperation(Summary = "Approve an access request")]
+    /// <summary>
+    /// Approve an access request with time-bound access (requires approveAccessRequests permission)
+    /// </summary>
+    [HttpPost("{id:guid}/approve")]
     [Authorize(Policy = Permissions.ApproveAccessRequests)]
-    public async Task<IActionResult> Approve(Guid id, [FromBody] ApproveAccessRequestRequest request)
-    {
-        var validationResult = await _approveValidator.ValidateAsync(request);
-        if (!validationResult.IsValid)
-        {
-            foreach (var error in validationResult.Errors)
-            {
-                ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
-            }
-            return NotifyModelStateError();
-        }
+    public async Task<IActionResult> Approve(Guid id, [FromBody] ApproveAccessRequestRequest request, CancellationToken ct = default)
+        => Ok(await svc.ApproveAsync(id, request, GetCurrentUserId(), ct));
 
-        var userId = GetCurrentUserId();
-        var response = await _accessRequestService.ApproveAsync(id, request, userId);
-        
-        await _auditService.LogAsync(AuditAction.ApproveAccess, "AccessRequest", id.ToString(), 
-            $"Access request approved for health record {response.HealthRecordId}");
-        
-        return Response(response);
-    }
-
-    [HttpPut("{id:guid}/decline")]
-    [SwaggerOperation(Summary = "Decline an access request")]
+    /// <summary>
+    /// Decline an access request (requires approveAccessRequests permission)
+    /// </summary>
+    [HttpPost("{id:guid}/decline")]
     [Authorize(Policy = Permissions.ApproveAccessRequests)]
-    public async Task<IActionResult> Decline(Guid id, [FromBody] DeclineAccessRequestRequest request)
-    {
-        var validationResult = await _declineValidator.ValidateAsync(request);
-        if (!validationResult.IsValid)
-        {
-            foreach (var error in validationResult.Errors)
-            {
-                ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
-            }
-            return NotifyModelStateError();
-        }
-
-        var userId = GetCurrentUserId();
-        var response = await _accessRequestService.DeclineAsync(id, request, userId);
-        
-        await _auditService.LogAsync(AuditAction.DeclineAccess, "AccessRequest", id.ToString(), 
-            $"Access request declined for health record {response.HealthRecordId}. Reason: {request.ReviewComment}");
-        
-        return Response(response);
-    }
+    public async Task<IActionResult> Decline(Guid id, [FromBody] DeclineAccessRequestRequest request, CancellationToken ct = default)
+        => Ok(await svc.DeclineAsync(id, request, GetCurrentUserId(), ct));
 }

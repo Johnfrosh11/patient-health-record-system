@@ -1,6 +1,6 @@
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=phr_db;Username=postgres;Password=your_password_here"
+    "Default": "Host=localhost;Port=5433;Database=PatientHealthRecordDB;Username=postgres;Password=your_password_here"
   },
   "JwtSettings": {
     "SecretKey": "your-very-secure-secret-key-must-be-at-least-32-characters-long-for-hs256",
@@ -19,30 +19,18 @@
   "AllowedHosts": "*",
   "CorsOrigins": [
     "http://localhost:3000",
-    "http://localhost:4200"
+    "http://localhost:5173"
   ],
-  "Serilog": {
-    "Using": [ "Serilog.Sinks.Console", "Serilog.Sinks.File" ],
-    "MinimumLevel": {
-      "Default": "Information",
-      "Override": {
-        "Microsoft": "Warning",
-        "System": "Warning"
-      }
-    },
-    "WriteTo": [
-      {
-        "Name": "Console"
-      },
-      {
-        "Name": "File",
-        "Args": {
-          "path": "logs/log-.txt",
-          "rollingInterval": "Day",
-          "retainedFileCountLimit": 7
-        }
-      }
-    ],
-    "Enrich": [ "FromLogContext", "WithMachineName", "WithThreadId" ]
+  "RateLimiting": {
+    "PermitLimit": 100,
+    "WindowMinutes": 1,
+    "QueueLimit": 10
+  },
+  "GlobalSettings": {
+    "EmailSettings": {
+      "ApiKey": "",
+      "FromEmail": "noreply@yourdomain.com",
+      "FromName": "Patient Health Record System"
+    }
   }
 }

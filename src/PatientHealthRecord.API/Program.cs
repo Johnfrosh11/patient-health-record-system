@@ -1,193 +1,179 @@
 using System.Text;
-using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
 using PatientHealthRecord.API.Authorization;
 using PatientHealthRecord.API.Middleware;
-using PatientHealthRecord.Application.Common.Interfaces;
-using PatientHealthRecord.Application.Common.Models;
-using PatientHealthRecord.Application.DTOs.AccessRequests;
-using PatientHealthRecord.Application.DTOs.Auth;
-using PatientHealthRecord.Application.DTOs.HealthRecords;
-using PatientHealthRecord.Application.Mappings;
-using PatientHealthRecord.Application.Validators;
-using PatientHealthRecord.Infrastructure.Data;
-using PatientHealthRecord.Infrastructure.Data.Seed;
-using PatientHealthRecord.Infrastructure.Services;
+using PatientHealthRecord.Application;
+using PatientHealthRecord.Repository;
+using PatientHealthRecord.Repository.Seed;
+using PatientHealthRecord.Utilities;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+var config = builder.Configuration;
 
-Log.Logger = new LoggerConfiguration()
-    .ReadFrom.Configuration(builder.Configuration)
+// ── Serilog (before everything else) ─────────────────────────────────
+builder.Host.UseSerilog((ctx, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.FromLogContext()
+    .Enrich.WithCorrelationId()
     .WriteTo.Console()
-    .WriteTo.File("logs/patient-health-record-.txt", rollingInterval: RollingInterval.Day)
-    .CreateLogger();
+    .WriteTo.File("logs/patient-health-record-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 31));
 
-builder.Host.UseSerilog();
+// ── Configuration ─────────────────────────────────────────────────────
+builder.Services.Configure<GlobalSettings>(config.GetSection("GlobalSettings"));
+builder.Services.Configure<JwtSettings>(config.GetSection("JwtSettings"));
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// ── Database ──────────────────────────────────────────────────────────
+var connectionString = config.GetConnectionString("Default")
+    ?? throw new InvalidOperationException("Connection string 'Default' not found.");
 
-builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
-var jwtSection = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSection["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
-var issuer = jwtSection["Issuer"] ?? throw new InvalidOperationException("JWT Issuer not configured");
-var audience = jwtSection["Audience"] ?? throw new InvalidOperationException("JWT Audience not configured");
+builder.Services.AddDbContext<PatientHealthRecordDbContext>(options =>
+    options.UseNpgsql(connectionString,
+        npgsql => npgsql.EnableRetryOnFailure(10, TimeSpan.FromSeconds(30), null)
+                        .MigrationsAssembly("PatientHealthRecord.Repository")));
 
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+// ── Authentication ─────────────────────────────────────────────────────
+var jwtSettings = config.GetSection("JwtSettings").Get<JwtSettings>()
+    ?? throw new InvalidOperationException("JWT settings not configured.");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = issuer,
-        ValidAudience = audience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-        ClockSkew = TimeSpan.Zero
-    };
-});
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key)),
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwtSettings.Audience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero, // zero tolerance on expiry
+            RequireSignedTokens = true,
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = ctx =>
+            {
+                if (ctx.Exception is SecurityTokenExpiredException)
+                    ctx.Response.Headers.Append("Token-Expired", "true");
+                return Task.CompletedTask;
+            },
+            OnChallenge = async ctx =>
+            {
+                ctx.HandleResponse();
+                ctx.Response.StatusCode = 401;
+                await ctx.Response.WriteAsJsonAsync(new ResponseModel<object>
+                {
+                    code = "401",
+                    message = "Unauthorized. Please login.",
+                    success = false
+                });
+            }
+        };
+    });
 
 builder.Services.AddAuthorization(options =>
 {
     options.AddPermissionPolicies();
 });
 
+// ── Permission Authorization Handler ──────────────────────────────────
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
-builder.Services.AddIpRateLimiting(builder.Configuration);
+// ── Global Exception Handler ──────────────────────────────────────────
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<IHealthRecordService, HealthRecordService>();
-builder.Services.AddScoped<IAccessRequestService, AccessRequestService>();
-builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IRoleService, RoleService>();
+// ── Rate Limiting ─────────────────────────────────────────────────────
+builder.Services.AddRateLimitingPolicies();
 
-builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
-builder.Services.AddScoped<IValidator<RegisterRequest>, RegisterRequestValidator>();
-builder.Services.AddScoped<IValidator<RefreshTokenRequest>, RefreshTokenRequestValidator>();
-builder.Services.AddScoped<IValidator<CreateHealthRecordRequest>, CreateHealthRecordRequestValidator>();
-builder.Services.AddScoped<IValidator<UpdateHealthRecordRequest>, UpdateHealthRecordRequestValidator>();
-builder.Services.AddScoped<IValidator<CreateAccessRequestRequest>, CreateAccessRequestRequestValidator>();
-builder.Services.AddScoped<IValidator<ApproveAccessRequestRequest>, ApproveAccessRequestRequestValidator>();
-builder.Services.AddScoped<IValidator<DeclineAccessRequestRequest>, DeclineAccessRequestRequestValidator>();
-builder.Services.AddScoped<IValidator<PatientHealthRecord.Application.DTOs.Users.CreateUserRequest>, CreateUserRequestValidator>();
-builder.Services.AddScoped<IValidator<PatientHealthRecord.Application.DTOs.Users.UpdateUserRequest>, UpdateUserRequestValidator>();
-builder.Services.AddScoped<IValidator<PatientHealthRecord.Application.DTOs.Roles.CreateRoleRequest>, CreateRoleRequestValidator>();
-builder.Services.AddScoped<IValidator<PatientHealthRecord.Application.DTOs.Roles.UpdateRoleRequest>, UpdateRoleRequestValidator>();
+// ── Application Services ──────────────────────────────────────────────
+builder.Services.InitServices(); // From AppBootstrapper
 
-builder.Services.AddAutoMapper(typeof(MappingProfile));
-
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        var origins = builder.Configuration.GetSection("CorsOrigins").Get<string[]>();
-        if (origins != null && origins.Length > 0 && !origins.Contains("*"))
-        {
-            policy.WithOrigins(origins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
-        }
-        else
-        {
-            // Development/Testing: Allow any origin
-            policy.AllowAnyOrigin()
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
-        }
-    });
-});
-
+// ── API + OpenAPI ──────────────────────────────────────────────────────
 builder.Services.AddControllers();
-
-builder.Services.AddApiVersioning(options =>
-{
-    options.DefaultApiVersion = new Asp.Versioning.ApiVersion(1, 0);
-    options.AssumeDefaultVersionWhenUnspecified = true;
-    options.ReportApiVersions = true;
-}).AddApiExplorer(options =>
-{
-    options.GroupNameFormat = "'v'VVV";
-    options.SubstituteApiVersionInUrl = true;
-});
-
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.EnableAnnotations();
-    
-    options.SwaggerDoc("v1", new OpenApiInfo
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
     {
         Title = "Patient Health Record API",
         Version = "v1",
-        Description = "A production-grade API for managing patient health records with role-based access control and time-bound access requests",
-        Contact = new OpenApiContact
-        {
-            Name = "Development Team",
-            Email = "dev@interswitch.com"
-        }
+        Description = "Enterprise-grade Patient Health Record System with RBAC and time-bound access control"
     });
 
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = SecuritySchemeType.Http,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "JWT Authorization header. Enter your token ONLY (without 'Bearer ' prefix). The 'Bearer ' prefix is added automatically."
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "JWT Authorization header. Enter your token ONLY."
     });
 
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
                 {
-                    Type = ReferenceType.SecurityScheme,
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
                     Id = "Bearer"
                 }
             },
             Array.Empty<string>()
         }
     });
-
-    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
-    {
-        options.IncludeXmlComments(xmlPath);
-    }
 });
+
+// ── CORS — never wildcard in production ───────────────────────────────
+var corsOrigins = config.GetSection("CorsOrigins").Get<string[]>() ?? new[] { "http://localhost:3000" };
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+    policy.WithOrigins(corsOrigins)
+          .AllowAnyMethod()
+          .AllowAnyHeader()
+          .AllowCredentials()));
 
 var app = builder.Build();
 
+// ══ MIDDLEWARE PIPELINE (ORDER IS NON-NEGOTIABLE) ═════════════════════
+app.UseExceptionHandler(opt => { }); // 1. Global exceptions first
+app.ConfigureOwaspSecurity();         // 2. OWASP security headers
+
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
+    app.UseSwagger();                 // 3. Swagger - dev only
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Patient Health Record API v1");
+        c.RoutePrefix = string.Empty; // Swagger at root
+    });
+}
+
+app.UseRouting();                     // 4. Routing
+app.UseCors();                        // 5. CORS
+app.UseHttpsRedirection();            // 6. HTTPS
+app.UseSerilogRequestLogging();       // 7. Request logging
+app.UseAuthentication();              // 8. Who are you?
+app.UseAuthorization();               // 9. What can you do?
+app.UseRateLimiter();                 // 10. Rate limit
+app.MapControllers();                 // 11. Endpoints
+
+// ── Database initialization ───────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
     var services = scope.ServiceProvider;
     try
     {
-        var context = services.GetRequiredService<ApplicationDbContext>();
-        await context.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(context);
+        await DatabaseSeeder.SeedAsync(services);
         Log.Information("Database seeded successfully");
     }
     catch (Exception ex)
@@ -195,35 +181,6 @@ if (app.Environment.IsDevelopment())
         Log.Error(ex, "An error occurred while seeding the database");
     }
 }
-
-app.UseOwaspSecurityHeaders();
-
-app.UseMiddleware<AuditLoggerMiddleware>();
-
-app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Patient Health Record API v1");
-        options.RoutePrefix = string.Empty;
-    });
-}
-
-app.UseSerilogRequestLogging();
-
-app.UseHttpsRedirection();
-
-app.UseCors();
-
-app.UseRateLimiter();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.MapControllers().RequireRateLimiting("IpRateLimit");
 
 try
 {
@@ -239,3 +196,5 @@ finally
     Log.CloseAndFlush();
 }
 
+// Make Program class accessible for WebApplicationFactory in integration tests
+public partial class Program { }

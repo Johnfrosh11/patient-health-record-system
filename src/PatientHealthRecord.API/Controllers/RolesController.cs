@@ -1,105 +1,73 @@
-using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PatientHealthRecord.Application.Common.Interfaces;
 using PatientHealthRecord.Application.DTOs.Roles;
 using PatientHealthRecord.Domain.Constants;
-using Swashbuckle.AspNetCore.Annotations;
+using PatientHealthRecord.Utilities;
 
 namespace PatientHealthRecord.API.Controllers;
 
-[Authorize]
-[ApiVersion("1.0")]
-[Route("api/v{version:apiVersion}/roles")]
-public class RolesController : BaseController
+/// <summary>
+/// Roles controller - role and permission management (requires manageRoles permission)
+/// </summary>
+[Route("api/v1/[controller]")]
+[ApiController]
+[Authorize(Policy = Permissions.ManageRoles)]
+public sealed class RolesController(IRoleService svc) : BaseController
 {
-    private readonly IRoleService _roleService;
-
-    public RolesController(IRoleService roleService)
-    {
-        _roleService = roleService;
-    }
-
+    /// <summary>
+    /// Get all roles
+    /// </summary>
     [HttpGet]
-    [SwaggerOperation(Summary = "Get all roles")]
-    [Authorize(Policy = Permissions.ManageRoles)]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken = default)
-    {
-        var roles = await _roleService.GetAllAsync(cancellationToken);
-        return Response(roles);
-    }
+    public async Task<IActionResult> GetAll(CancellationToken ct = default)
+        => Ok(await svc.GetAllAsync(ct));
 
-    [HttpGet("{id}")]
-    [SwaggerOperation(Summary = "Get role by ID")]
-    [Authorize(Policy = Permissions.ManageRoles)]
-    public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken = default)
-    {
-        var role = await _roleService.GetByIdAsync(id, cancellationToken);
-        return Response(role);
-    }
+    /// <summary>
+    /// Get role by ID
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)
+        => Ok(await svc.GetByIdAsync(id, ct));
 
+    /// <summary>
+    /// Create a new role
+    /// </summary>
     [HttpPost]
-    [SwaggerOperation(Summary = "Create a new role")]
-    [Authorize(Policy = Permissions.ManageRoles)]
-    public async Task<IActionResult> Create(
-        [FromBody] CreateRoleRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        var role = await _roleService.CreateAsync(request, cancellationToken);
-        return CreatedAtAction(nameof(GetById), new { id = role.Id }, role);
-    }
+    public async Task<IActionResult> Create([FromBody] CreateRoleRequest request, CancellationToken ct = default)
+        => Ok(await svc.CreateAsync(request, ct));
 
-    [HttpPut("{id}")]
-    [SwaggerOperation(Summary = "Update role information")]
-    [Authorize(Policy = Permissions.ManageRoles)]
-    public async Task<IActionResult> Update(
-        Guid id,
-        [FromBody] UpdateRoleRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        var role = await _roleService.UpdateAsync(id, request, cancellationToken);
-        return Response(role);
-    }
+    /// <summary>
+    /// Update role details
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct = default)
+        => Ok(await svc.UpdateAsync(id, request, ct));
 
-    [HttpDelete("{id}")]
-    [SwaggerOperation(Summary = "Delete a role")]
-    [Authorize(Policy = Permissions.ManageRoles)]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken = default)
-    {
-        var result = await _roleService.DeleteAsync(id, cancellationToken);
-        return Response(result);
-    }
+    /// <summary>
+    /// Delete a role
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
+        => Ok(await svc.DeleteAsync(id, ct));
 
-    [HttpPost("{roleId}/permissions/{permissionId}")]
-    [SwaggerOperation(Summary = "Assign permission to role")]
-    [Authorize(Policy = Permissions.ManageRoles)]
-    public async Task<IActionResult> AssignPermission(
-        Guid roleId,
-        Guid permissionId,
-        CancellationToken cancellationToken = default)
-    {
-        var result = await _roleService.AssignPermissionAsync(roleId, permissionId, cancellationToken);
-        return Response(result);
-    }
-
-    [HttpDelete("{roleId}/permissions/{permissionId}")]
-    [SwaggerOperation(Summary = "Remove permission from role")]
-    [Authorize(Policy = Permissions.ManageRoles)]
-    public async Task<IActionResult> RemovePermission(
-        Guid roleId,
-        Guid permissionId,
-        CancellationToken cancellationToken = default)
-    {
-        var result = await _roleService.RemovePermissionAsync(roleId, permissionId, cancellationToken);
-        return Response(result);
-    }
-
+    /// <summary>
+    /// Get all permissions
+    /// </summary>
     [HttpGet("permissions")]
-    [SwaggerOperation(Summary = "Get all available permissions")]
-    [Authorize(Policy = Permissions.ManageRoles)]
-    public async Task<IActionResult> GetAllPermissions(CancellationToken cancellationToken = default)
-    {
-        var permissions = await _roleService.GetAllPermissionsAsync(cancellationToken);
-        return Response(permissions);
-    }
+    public async Task<IActionResult> GetAllPermissions(CancellationToken ct = default)
+        => Ok(await svc.GetAllPermissionsAsync(ct));
+
+    /// <summary>
+    /// Assign a permission to a role
+    /// </summary>
+    [HttpPost("{roleId:guid}/permissions/{permissionId:guid}")]
+    public async Task<IActionResult> AssignPermission(Guid roleId, Guid permissionId, CancellationToken ct = default)
+        => Ok(await svc.AssignPermissionAsync(roleId, permissionId, ct));
+
+    /// <summary>
+    /// Remove a permission from a role
+    /// </summary>
+    [HttpDelete("{roleId:guid}/permissions/{permissionId:guid}")]
+    public async Task<IActionResult> RemovePermission(Guid roleId, Guid permissionId, CancellationToken ct = default)
+        => Ok(await svc.RemovePermissionAsync(roleId, permissionId, ct));
 }

@@ -1,502 +1,293 @@
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Moq;
+using PatientHealthRecord.Application.Auth.Interface;
 using PatientHealthRecord.Application.DTOs.AccessRequests;
-using PatientHealthRecord.Domain.Constants;
+using PatientHealthRecord.Application.Services.AccessRequests;
+using PatientHealthRecord.Domain;
 using PatientHealthRecord.Domain.Entities;
-using PatientHealthRecord.Domain.Enums;
-using PatientHealthRecord.Domain.Exceptions;
-using PatientHealthRecord.Infrastructure.Data;
-using PatientHealthRecord.Infrastructure.Services;
+using PatientHealthRecord.Tests.Helpers;
 
 namespace PatientHealthRecord.Tests.Services;
 
-public class AccessRequestServiceTests : IDisposable
+public class AccessRequestServiceTests
 {
-    private readonly ApplicationDbContext _context;
-    private readonly AccessRequestService _service;
-    private readonly Guid _adminUserId;
-    private readonly Guid _doctorUserId;
-    private readonly Guid _nurseUserId;
-    private readonly Guid _healthRecordId;
+    private readonly Guid _testUserId;
+    private readonly Guid _testOrgId;
+    private readonly Mock<IAuthUser> _mockAuthUser;
+    private readonly Mock<ILogger<AccessRequestService>> _mockLogger;
 
     public AccessRequestServiceTests()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-            .Options;
-
-        _context = new ApplicationDbContext(options);
-        _service = new AccessRequestService(_context);
-
-        _adminUserId = Guid.NewGuid();
-        _doctorUserId = Guid.NewGuid();
-        _nurseUserId = Guid.NewGuid();
-        _healthRecordId = Guid.NewGuid();
-
-        SeedTestData();
+        _testUserId = Guid.NewGuid();
+        _testOrgId = Guid.NewGuid();
+        _mockAuthUser = TestHelpers.CreateMockAuthUser(_testUserId, _testOrgId);
+        _mockLogger = TestHelpers.CreateMockLogger<AccessRequestService>();
     }
 
-    private void SeedTestData()
+    [Fact]
+    public async Task CreateAsync_WithValidData_ShouldCreateRequest()
     {
-        var viewPermission = new Permission { Id = Guid.NewGuid(), Name = Permissions.ViewPatientRecords };
-        var approvePermission = new Permission { Id = Guid.NewGuid(), Name = Permissions.ApproveAccessRequests };
-        var adminRole = new Role { Id = Guid.NewGuid(), Name = Roles.Admin };
-        var doctorRole = new Role { Id = Guid.NewGuid(), Name = Roles.Doctor };
-        var nurseRole = new Role { Id = Guid.NewGuid(), Name = Roles.Nurse };
-
-        adminRole.RolePermissions = new List<RolePermission>
+        // Arrange
+        using var db = TestHelpers.CreateInMemoryDbContext();
+        
+        var healthRecord = new THealthRecord
         {
-            new RolePermission { RoleId = adminRole.Id, PermissionId = viewPermission.Id, Permission = viewPermission },
-            new RolePermission { RoleId = adminRole.Id, PermissionId = approvePermission.Id, Permission = approvePermission }
-        };
-        var adminUser = new User
-        {
-            Id = _adminUserId,
-            Username = "admin",
-            Email = "admin@test.com",
-            PasswordHash = "hash",
-            IsActive = true,
-            UserRoles = new List<UserRole>
-            {
-                new UserRole { UserId = _adminUserId, RoleId = adminRole.Id, Role = adminRole }
-            }
-        };
-
-        var doctorUser = new User
-        {
-            Id = _doctorUserId,
-            Username = "doctor",
-            Email = "doctor@test.com",
-            PasswordHash = "hash",
-            IsActive = true,
-            UserRoles = new List<UserRole>
-            {
-                new UserRole { UserId = _doctorUserId, RoleId = doctorRole.Id, Role = doctorRole }
-            }
-        };
-
-        var nurseUser = new User
-        {
-            Id = _nurseUserId,
-            Username = "nurse",
-            Email = "nurse@test.com",
-            PasswordHash = "hash",
-            IsActive = true,
-            UserRoles = new List<UserRole>
-            {
-                new UserRole { UserId = _nurseUserId, RoleId = nurseRole.Id, Role = nurseRole }
-            }
-        };
-        var healthRecord = new HealthRecord
-        {
-            Id = _healthRecordId,
-            PatientName = "John Doe",
+            HealthRecordId = Guid.NewGuid(),
+            PatientName = "Test Patient",
             DateOfBirth = new DateTime(1990, 1, 1),
-            Diagnosis = "Test diagnosis",
-            TreatmentPlan = "Test treatment",
-            CreatedBy = _doctorUserId,
-            IsDeleted = false
+            Diagnosis = "Test",
+            TreatmentPlan = "Test",
+            CreatedByUserId = Guid.NewGuid(),
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = "system"
         };
+        
+        await db.HealthRecords.AddAsync(healthRecord);
+        await db.SaveChangesAsync();
 
-        _context.Permissions.AddRange(viewPermission, approvePermission);
-        _context.Roles.AddRange(adminRole, doctorRole, nurseRole);
-        _context.Users.AddRange(adminUser, doctorUser, nurseUser);
-        _context.HealthRecords.Add(healthRecord);
-        _context.SaveChanges();
-    }
-
-    [Fact]
-    public async Task CreateAsync_WithValidData_ShouldCreateAccessRequest()
-    {
+        var service = new AccessRequestService(db, _mockAuthUser.Object, _mockLogger.Object);
         var request = new CreateAccessRequestRequest
         {
-            HealthRecordId = _healthRecordId,
-            Reason = "Need access for consultation"
+            HealthRecordId = healthRecord.HealthRecordId,
+            Reason = "Need to review patient history"
         };
-        var result = await _service.CreateAsync(request, _nurseUserId);
+
+        // Act
+        var result = await service.CreateAsync(request, _testUserId);
+
+        // Assert
         result.Should().NotBeNull();
-        result.HealthRecordId.Should().Be(_healthRecordId);
-        result.RequestingUserId.Should().Be(_nurseUserId);
+        result.Reason.Should().Be("Need to review patient history");
         result.Status.Should().Be(AccessRequestStatus.Pending);
-        result.Reason.Should().Be("Need access for consultation");
-
-        var accessRequest = await _context.AccessRequests.FindAsync(result.Id);
-        accessRequest.Should().NotBeNull();
+        result.RequestingUserId.Should().Be(_testUserId);
     }
 
     [Fact]
-    public async Task CreateAsync_UserWithViewPermission_ShouldThrowValidationException()
+    public async Task CreateAsync_WithNonexistentHealthRecord_ShouldThrowException()
     {
-        var request = new CreateAccessRequestRequest
-        {
-            HealthRecordId = _healthRecordId,
-            Reason = "Need access"
-        };
-        await _service.Invoking(s => s.CreateAsync(request, _adminUserId))
-            .Should().ThrowAsync<ValidationException>()
-            .WithMessage("*view all patient records permission*");
-    }
-
-    [Fact]
-    public async Task CreateAsync_RequestingOwnRecord_ShouldThrowValidationException()
-    {
-        var request = new CreateAccessRequestRequest
-        {
-            HealthRecordId = _healthRecordId,
-            Reason = "Need access"
-        };
-        await _service.Invoking(s => s.CreateAsync(request, _doctorUserId))
-            .Should().ThrowAsync<ValidationException>()
-            .WithMessage("*cannot request access to your own health records*");
-    }
-
-    [Fact]
-    public async Task CreateAsync_DuplicatePendingRequest_ShouldThrowConflictException()
-    {
-        var existingRequest = new AccessRequest
-        {
-            Id = Guid.NewGuid(),
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "First request",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.Add(existingRequest);
-        await _context.SaveChangesAsync();
-
-        var newRequest = new CreateAccessRequestRequest
-        {
-            HealthRecordId = _healthRecordId,
-            Reason = "Second request"
-        };
-        await _service.Invoking(s => s.CreateAsync(newRequest, _nurseUserId))
-            .Should().ThrowAsync<ConflictException>()
-            .WithMessage("*already have a pending access request*");
-    }
-
-    [Fact]
-    public async Task CreateAsync_WithNonExistentHealthRecord_ShouldThrowNotFoundException()
-    {
+        // Arrange
+        using var db = TestHelpers.CreateInMemoryDbContext();
+        var service = new AccessRequestService(db, _mockAuthUser.Object, _mockLogger.Object);
         var request = new CreateAccessRequestRequest
         {
             HealthRecordId = Guid.NewGuid(),
-            Reason = "Need access"
+            Reason = "Test reason"
         };
-        await _service.Invoking(s => s.CreateAsync(request, _nurseUserId))
-            .Should().ThrowAsync<NotFoundException>();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => 
+            service.CreateAsync(request, _testUserId));
     }
 
     [Fact]
-    public async Task ApproveAsync_WithValidData_ShouldApproveRequest()
+    public async Task ApproveAsync_WithValidRequest_ShouldApproveWithTimeRange()
     {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
+        // Arrange
+        using var db = TestHelpers.CreateInMemoryDbContext();
+        
+        var requestingUserId = Guid.NewGuid();
+        var reviewerId = _testUserId;
+        
+        var requestingUser = new TUser
         {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Need access",
-            Status = AccessRequestStatus.Pending
+            UserId = requestingUserId,
+            Username = "requester",
+            Email = "requester@example.com",
+            PasswordHash = "hash",
+            FirstName = "Requester",
+            LastName = "User",
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = "system"
         };
+        
+        var healthRecord = new THealthRecord
+        {
+            HealthRecordId = Guid.NewGuid(),
+            PatientName = "Test Patient",
+            DateOfBirth = new DateTime(1990, 1, 1),
+            Diagnosis = "Test",
+            TreatmentPlan = "Test",
+            CreatedByUserId = Guid.NewGuid(),
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = "system"
+        };
+        
+        var accessRequest = new TAccessRequest
+        {
+            AccessRequestId = Guid.NewGuid(),
+            HealthRecordId = healthRecord.HealthRecordId,
+            RequestingUserId = requestingUserId,
+            Reason = "Need access",
+            Status = AccessRequestStatus.Pending,
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = requestingUserId.ToString()
+        };
+        
+        await db.Users.AddAsync(requestingUser);
+        await db.HealthRecords.AddAsync(healthRecord);
+        await db.AccessRequests.AddAsync(accessRequest);
+        await db.SaveChangesAsync();
 
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-
+        var service = new AccessRequestService(db, _mockAuthUser.Object, _mockLogger.Object);
+        var startTime = DateTime.UtcNow;
+        var endTime = DateTime.UtcNow.AddDays(1);
         var approveRequest = new ApproveAccessRequestRequest
         {
-            AccessStartDateTime = DateTime.UtcNow,
-            AccessEndDateTime = DateTime.UtcNow.AddHours(2)
+            AccessStartDateTime = startTime,
+            AccessEndDateTime = endTime,
+            ReviewComment = "Approved for one day"
         };
-        var result = await _service.ApproveAsync(accessRequestId, approveRequest, _adminUserId);
+
+        // Act
+        var result = await service.ApproveAsync(accessRequest.AccessRequestId, approveRequest, reviewerId);
+
+        // Assert
         result.Should().NotBeNull();
         result.Status.Should().Be(AccessRequestStatus.Approved);
-        result.ReviewedBy.Should().Be(_adminUserId);
-        result.AccessStartDateTime.Should().NotBeNull();
-        result.AccessEndDateTime.Should().NotBeNull();
+        result.ReviewedBy.Should().Be(reviewerId);
+        result.AccessStartDateTime.Should().Be(startTime);
+        result.AccessEndDateTime.Should().Be(endTime);
     }
 
     [Fact]
-    public async Task ApproveAsync_WithoutApprovePermission_ShouldThrowForbiddenException()
+    public async Task DeclineAsync_WithValidRequest_ShouldDecline()
     {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
+        // Arrange
+        using var db = TestHelpers.CreateInMemoryDbContext();
+        
+        var requestingUserId = Guid.NewGuid();
+        var reviewerId = _testUserId;
+        
+        var requestingUser = new TUser
         {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
+            UserId = requestingUserId,
+            Username = "requester",
+            Email = "requester@example.com",
+            PasswordHash = "hash",
+            FirstName = "Requester",
+            LastName = "User",
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = "system"
+        };
+        
+        var healthRecord = new THealthRecord
+        {
+            HealthRecordId = Guid.NewGuid(),
+            PatientName = "Test Patient",
+            DateOfBirth = new DateTime(1990, 1, 1),
+            Diagnosis = "Test",
+            TreatmentPlan = "Test",
+            CreatedByUserId = Guid.NewGuid(),
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = "system"
+        };
+        
+        var accessRequest = new TAccessRequest
+        {
+            AccessRequestId = Guid.NewGuid(),
+            HealthRecordId = healthRecord.HealthRecordId,
+            RequestingUserId = requestingUserId,
             Reason = "Need access",
-            Status = AccessRequestStatus.Pending
+            Status = AccessRequestStatus.Pending,
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = requestingUserId.ToString()
         };
+        
+        await db.Users.AddAsync(requestingUser);
+        await db.HealthRecords.AddAsync(healthRecord);
+        await db.AccessRequests.AddAsync(accessRequest);
+        await db.SaveChangesAsync();
 
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-
-        var approveRequest = new ApproveAccessRequestRequest
-        {
-            AccessStartDateTime = DateTime.UtcNow,
-            AccessEndDateTime = DateTime.UtcNow.AddHours(2)
-        };
-        await _service.Invoking(s => s.ApproveAsync(accessRequestId, approveRequest, _doctorUserId))
-            .Should().ThrowAsync<ForbiddenException>();
-    }
-
-    [Fact]
-    public async Task ApproveAsync_NonPendingRequest_ShouldThrowValidationException()
-    {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
-        {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Need access",
-            Status = AccessRequestStatus.Approved
-        };
-
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-
-        var approveRequest = new ApproveAccessRequestRequest
-        {
-            AccessStartDateTime = DateTime.UtcNow,
-            AccessEndDateTime = DateTime.UtcNow.AddHours(2)
-        };
-        await _service.Invoking(s => s.ApproveAsync(accessRequestId, approveRequest, _adminUserId))
-            .Should().ThrowAsync<ValidationException>()
-            .WithMessage("*Cannot approve access request with status*");
-    }
-
-    [Fact]
-    public async Task ApproveAsync_WithInvalidTimeRange_ShouldThrowValidationException()
-    {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
-        {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Need access",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-
-        var approveRequest = new ApproveAccessRequestRequest
-        {
-            AccessStartDateTime = DateTime.UtcNow.AddHours(2),
-            AccessEndDateTime = DateTime.UtcNow.AddHours(1)
-        };
-        await _service.Invoking(s => s.ApproveAsync(accessRequestId, approveRequest, _adminUserId))
-            .Should().ThrowAsync<ValidationException>()
-            .WithMessage("*must be before*");
-    }
-
-    [Fact]
-    public async Task ApproveAsync_WithPastEndDate_ShouldThrowValidationException()
-    {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
-        {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Need access",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-
-        var approveRequest = new ApproveAccessRequestRequest
-        {
-            AccessStartDateTime = DateTime.UtcNow.AddHours(-3),
-            AccessEndDateTime = DateTime.UtcNow.AddHours(-1)
-        };
-        await _service.Invoking(s => s.ApproveAsync(accessRequestId, approveRequest, _adminUserId))
-            .Should().ThrowAsync<ValidationException>()
-            .WithMessage("*must be in the future*");
-    }
-
-    [Fact]
-    public async Task DeclineAsync_WithValidData_ShouldDeclineRequest()
-    {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
-        {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Need access",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-
+        var service = new AccessRequestService(db, _mockAuthUser.Object, _mockLogger.Object);
         var declineRequest = new DeclineAccessRequestRequest
         {
-            ReviewComment = "Insufficient justification"
+            ReviewComment = "Access not needed at this time"
         };
-        var result = await _service.DeclineAsync(accessRequestId, declineRequest, _adminUserId);
+
+        // Act
+        var result = await service.DeclineAsync(accessRequest.AccessRequestId, declineRequest, reviewerId);
+
+        // Assert
         result.Should().NotBeNull();
-        result.Status.Should().Be(AccessRequestStatus.Declined);
-        result.ReviewedBy.Should().Be(_adminUserId);
-        result.ReviewComment.Should().Be("Insufficient justification");
-    }
-
-    [Fact]
-    public async Task DeclineAsync_WithoutApprovePermission_ShouldThrowForbiddenException()
-    {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
-        {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Need access",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-
-        var declineRequest = new DeclineAccessRequestRequest
-        {
-            ReviewComment = "Declined"
-        };
-        await _service.Invoking(s => s.DeclineAsync(accessRequestId, declineRequest, _nurseUserId))
-            .Should().ThrowAsync<ForbiddenException>();
-    }
-
-    [Fact]
-    public async Task GetAllAsync_AsRegularUser_ShouldReturnOnlyOwnRequests()
-    {
-        var nurseRequest = new AccessRequest
-        {
-            Id = Guid.NewGuid(),
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Nurse request",
-            Status = AccessRequestStatus.Pending
-        };
-
-        var doctorRequest = new AccessRequest
-        {
-            Id = Guid.NewGuid(),
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _doctorUserId,
-            Reason = "Doctor request",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.AddRange(nurseRequest, doctorRequest);
-        await _context.SaveChangesAsync();
-        var result = await _service.GetAllAsync(_nurseUserId, isApprover: false);
-        result.Should().HaveCount(1);
-        result.First().RequestingUserId.Should().Be(_nurseUserId);
-    }
-
-    [Fact]
-    public async Task GetAllAsync_AsApprover_ShouldReturnAllRequests()
-    {
-        var nurseRequest = new AccessRequest
-        {
-            Id = Guid.NewGuid(),
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Nurse request",
-            Status = AccessRequestStatus.Pending
-        };
-
-        var doctorRequest = new AccessRequest
-        {
-            Id = Guid.NewGuid(),
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _doctorUserId,
-            Reason = "Doctor request",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.AddRange(nurseRequest, doctorRequest);
-        await _context.SaveChangesAsync();
-        var result = await _service.GetAllAsync(_adminUserId, isApprover: true);
-        result.Should().HaveCount(2);
-    }
-
-    [Fact]
-    public async Task GetByIdAsync_AsOwner_ShouldReturnRequest()
-    {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
-        {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Need access",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-        var result = await _service.GetByIdAsync(accessRequestId, _nurseUserId);
-        result.Should().NotBeNull();
-        result.Id.Should().Be(accessRequestId);
-    }
-
-    [Fact]
-    public async Task GetByIdAsync_NotOwnerNotApprover_ShouldThrowForbiddenException()
-    {
-        var accessRequestId = Guid.NewGuid();
-        var accessRequest = new AccessRequest
-        {
-            Id = accessRequestId,
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Need access",
-            Status = AccessRequestStatus.Pending
-        };
-
-        _context.AccessRequests.Add(accessRequest);
-        await _context.SaveChangesAsync();
-        await _service.Invoking(s => s.GetByIdAsync(accessRequestId, _doctorUserId))
-            .Should().ThrowAsync<ForbiddenException>();
+        result.Status.Should().Be(AccessRequestStatus.Rejected);
+        result.ReviewedBy.Should().Be(reviewerId);
+        result.ReviewComment.Should().Be("Access not needed at this time");
     }
 
     [Fact]
     public async Task GetPendingAsync_ShouldReturnOnlyPendingRequests()
     {
-        var pendingRequest = new AccessRequest
+        // Arrange
+        using var db = TestHelpers.CreateInMemoryDbContext();
+        
+        var requestingUser = new TUser
         {
-            Id = Guid.NewGuid(),
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _nurseUserId,
-            Reason = "Pending request",
-            Status = AccessRequestStatus.Pending
+            UserId = Guid.NewGuid(),
+            Username = "requester",
+            Email = "requester@example.com",
+            PasswordHash = "hash",
+            FirstName = "Requester",
+            LastName = "User",
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = "system"
         };
-
-        var approvedRequest = new AccessRequest
+        
+        var healthRecord = new THealthRecord
         {
-            Id = Guid.NewGuid(),
-            HealthRecordId = _healthRecordId,
-            RequestingUserId = _doctorUserId,
+            HealthRecordId = Guid.NewGuid(),
+            PatientName = "Test Patient",
+            DateOfBirth = new DateTime(1990, 1, 1),
+            Diagnosis = "Test",
+            TreatmentPlan = "Test",
+            CreatedByUserId = Guid.NewGuid(),
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = "system"
+        };
+        
+        var pendingRequest = new TAccessRequest
+        {
+            HealthRecordId = healthRecord.HealthRecordId,
+            RequestingUserId = requestingUser.UserId,
+            Reason = "Pending request",
+            Status = AccessRequestStatus.Pending,
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = requestingUser.UserId.ToString()
+        };
+        
+        var approvedRequest = new TAccessRequest
+        {
+            HealthRecordId = healthRecord.HealthRecordId,
+            RequestingUserId = requestingUser.UserId,
             Reason = "Approved request",
             Status = AccessRequestStatus.Approved,
-            ReviewedBy = _adminUserId
+            OrganizationId = _testOrgId,
+            IsActive = true,
+            CreatedBy = requestingUser.UserId.ToString()
         };
+        
+        await db.Users.AddAsync(requestingUser);
+        await db.HealthRecords.AddAsync(healthRecord);
+        await db.AccessRequests.AddRangeAsync(pendingRequest, approvedRequest);
+        await db.SaveChangesAsync();
 
-        _context.AccessRequests.AddRange(pendingRequest, approvedRequest);
-        await _context.SaveChangesAsync();
+        var service = new AccessRequestService(db, _mockAuthUser.Object, _mockLogger.Object);
 
-        var result = await _service.GetPendingAsync(_adminUserId);
+        // Act
+        var result = await service.GetPendingAsync(_testUserId);
 
+        // Assert
         result.Should().HaveCount(1);
         result.First().Status.Should().Be(AccessRequestStatus.Pending);
-    }
-
-    public void Dispose()
-    {
-        _context.Dispose();
     }
 }

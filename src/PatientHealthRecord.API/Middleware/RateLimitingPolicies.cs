@@ -1,67 +1,48 @@
+using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 
 namespace PatientHealthRecord.API.Middleware;
 
+/// <summary>
+/// Rate limiting policies configuration
+/// </summary>
 public static class RateLimitingPolicies
 {
-    public static IServiceCollection AddIpRateLimiting(this IServiceCollection services, IConfiguration configuration)
-    {
-        var permitLimit = configuration.GetValue<int>("RateLimiting:PermitLimit", 100);
-        var windowMinutes = configuration.GetValue<int>("RateLimiting:WindowMinutes", 1);
-        var queueLimit = configuration.GetValue<int>("RateLimiting:QueueLimit", 10);
+    public const string StandardPolicy = "standard";
+    public const string AuthPolicy = "auth";
 
+    public static IServiceCollection AddRateLimitingPolicies(this IServiceCollection services)
+    {
         services.AddRateLimiter(options =>
         {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-            options.AddPolicy("IpRateLimit", context =>
+            // Standard policy: 100 requests per minute per IP
+            options.AddFixedWindowLimiter(StandardPolicy, opt =>
             {
-                var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                
-                return RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ipAddress,
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = permitLimit,
-                        Window = TimeSpan.FromMinutes(windowMinutes),
-                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                        QueueLimit = queueLimit
-                    });
+                opt.PermitLimit = 100;
+                opt.Window = TimeSpan.FromMinutes(1);
+                opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                opt.QueueLimit = 10;
             });
 
-            options.AddPolicy("AuthRateLimit", context =>
+            // Auth policy: 10 requests per minute per IP (stricter for auth endpoints)
+            options.AddFixedWindowLimiter(AuthPolicy, opt =>
             {
-                var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                
-                return RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ipAddress,
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = 5,
-                        Window = TimeSpan.FromMinutes(1),
-                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                        QueueLimit = 0
-                    });
+                opt.PermitLimit = 10;
+                opt.Window = TimeSpan.FromMinutes(1);
+                opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                opt.QueueLimit = 2;
             });
 
-            options.OnRejected = async (context, token) =>
+            options.RejectionStatusCode = 429;
+            options.OnRejected = async (context, ct) =>
             {
-                context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-                
-                TimeSpan? retryAfter = null;
-                if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfterValue))
-                {
-                    retryAfter = retryAfterValue;
-                    context.HttpContext.Response.Headers.RetryAfter = ((int)retryAfterValue.TotalSeconds).ToString();
-                }
-
+                context.HttpContext.Response.StatusCode = 429;
                 await context.HttpContext.Response.WriteAsJsonAsync(new
                 {
+                    code = "429",
                     success = false,
-                    message = "Too many requests. Please try again later.",
-                    statusCode = 429,
-                    retryAfterSeconds = retryAfter?.TotalSeconds
-                }, cancellationToken: token);
+                    message = "Too many requests. Please try again later."
+                }, cancellationToken: ct);
             };
         });
 

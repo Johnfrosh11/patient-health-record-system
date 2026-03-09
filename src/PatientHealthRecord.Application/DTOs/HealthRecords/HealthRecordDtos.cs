@@ -11,8 +11,12 @@ public class CreateHealthRecordRequest
     public string? MedicalHistory { get; set; }
 }
 
+// Alias for service layer
+public class CreateHealthRecordDto : CreateHealthRecordRequest { }
+
 public class UpdateHealthRecordRequest
 {
+    public Guid HealthRecordId { get; set; }
     public string PatientName { get; set; } = string.Empty;
     public DateTime DateOfBirth { get; set; }
     public string Diagnosis { get; set; } = string.Empty;
@@ -20,21 +24,27 @@ public class UpdateHealthRecordRequest
     public string? MedicalHistory { get; set; }
 }
 
+// Alias for service layer
+public class UpdateHealthRecordDto : UpdateHealthRecordRequest { }
+
 public class HealthRecordResponse
 {
-    public Guid Id { get; set; }
+    public Guid HealthRecordId { get; set; }
     public string PatientName { get; set; } = string.Empty;
     public DateTime DateOfBirth { get; set; }
+    public int Age { get; set; }
     public string Diagnosis { get; set; } = string.Empty;
     public string TreatmentPlan { get; set; } = string.Empty;
     public string? MedicalHistory { get; set; }
-    public Guid CreatedBy { get; set; }
-    public string CreatedByUsername { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
-    public Guid? LastModifiedBy { get; set; }
-    public DateTime? LastModifiedDate { get; set; }
-    public bool IsDeleted { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public string CreatedBy { get; set; } = string.Empty;
+    public string CreatedDate { get; set; } = string.Empty;
+    public string? LastModified { get; set; }
+    public bool CanAccess { get; set; }
 }
+
+// Alias for service layer
+public class HealthRecordViewModel : HealthRecordResponse { }
 
 public class PaginatedHealthRecordsResponse
 {

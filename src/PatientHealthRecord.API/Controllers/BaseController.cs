@@ -1,67 +1,29 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PatientHealthRecord.Application.Common.Models;
-using System.Net;
+using PatientHealthRecord.Utilities;
 using System.Security.Claims;
 
 namespace PatientHealthRecord.API.Controllers;
 
-[Route("api/[controller]")]
+/// <summary>
+/// Base controller for all API controllers
+/// Single method: Response<T> — thin controller actions call this
+/// </summary>
+[Route("api/v1/[controller]")]
 [ApiController]
-public class BaseController : ControllerBase
+[Authorize]
+public abstract class BaseController : ControllerBase
 {
-    protected IActionResult NotifyModelStateError()
-    {
-        var errorMessages = new List<string>();
-        var errors = ModelState.Values.SelectMany(v => v.Errors);
-        
-        foreach (var error in errors)
-        {
-            var msg = error.Exception == null ? error.ErrorMessage : error.Exception.Message;
-            errorMessages.Add(msg);
-        }
+    /// <summary>
+    /// Single response mapper — the only place HTTP status mapping lives
+    /// Controllers call: return Response(await service.DoStuff());
+    /// </summary>
+    protected IActionResult Response<T>(ResponseModel<T> result)
+        => result?.code == "00" ? Ok(result) : BadRequest(result);
 
-        ResponseModel response = new()
-        {
-            Code = ErrorCodes.ValidationError,
-            Message = errorMessages.FirstOrDefault() ?? "Validation failed",
-            Success = false
-        };
-
-        return BadRequest(response);
-    }
-
-    protected new IActionResult Response<T>(ApiResponse<T> result)
-    {
-        if (result?.StatusCode == (int)HttpStatusCode.OK)
-        {
-            return Ok(result);
-        }
-
-        return StatusCode(result?.StatusCode ?? 400, result);
-    }
-
-    protected new IActionResult Response(ResponseModel result)
-    {
-        if (result?.Code == ErrorCodes.Successful)
-        {
-            return Ok(result);
-        }
-
-        return BadRequest(result);
-    }
-
-    protected new IActionResult Response<T>(T data, string message = "Success")
-    {
-        var response = ApiResponse<T>.SuccessResponse(data, message);
-        return Ok(response);
-    }
-
-    protected IActionResult ErrorResponse(string message, int statusCode = 400)
-    {
-        var response = ApiResponse<object>.ErrorResponse(message, statusCode);
-        return StatusCode(statusCode, response);
-    }
-
+    /// <summary>
+    /// Helper to get current user ID from JWT claims
+    /// </summary>
     protected Guid GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

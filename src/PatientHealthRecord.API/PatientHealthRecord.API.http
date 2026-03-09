@@ -1,6 +1,6 @@
-@PatientHealthRecord.API_HostAddress = http://localhost:5243
+@PatientHealthRecord_API_HostAddress = http://localhost:5243
 
-GET {{PatientHealthRecord.API_HostAddress}}/weatherforecast/
+GET {{PatientHealthRecord_API_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###

@@ -1,4 +1,4 @@
-using PatientHealthRecord.Domain.Enums;
+using PatientHealthRecord.Domain;
 
 namespace PatientHealthRecord.Application.DTOs.AccessRequests;
 

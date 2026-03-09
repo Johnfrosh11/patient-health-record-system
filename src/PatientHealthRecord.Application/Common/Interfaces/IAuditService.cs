@@ -18,18 +18,18 @@ public interface IAuditService
         string? details = null,
         CancellationToken cancellationToken = default);
 
-    Task<List<AuditLog>> GetEntityAuditLogsAsync(
+    Task<List<TAuditLog>> GetEntityAuditLogsAsync(
         string entityName,
         string entityId,
         CancellationToken cancellationToken = default);
 
-    Task<List<AuditLog>> GetUserAuditLogsAsync(
+    Task<List<TAuditLog>> GetUserAuditLogsAsync(
         Guid userId,
         int page = 1,
         int pageSize = 50,
         CancellationToken cancellationToken = default);
 
-    Task<List<AuditLog>> GetAllAuditLogsAsync(
+    Task<List<TAuditLog>> GetAllAuditLogsAsync(
         int page = 1,
         int pageSize = 50,
         AuditAction? action = null,

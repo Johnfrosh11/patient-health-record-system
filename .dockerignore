@@ -1,0 +1,31 @@
+# Git
+.git/
+.gitignore
+
+# Local build outputs (Windows-compiled; must not leak into Linux Docker image)
+**/bin/
+**/obj/
+
+# Frontend build artifacts / dependencies
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Runtime logs
+**/logs/
+
+# Local override configs (secrets must come from env vars in production)
+**/appsettings.Development.json
+
+# IDE / OS artefacts
+.vs/
+.vscode/
+**/.DS_Store
+
+# Test project (not needed in the production image)
+tests/
+
+# Docker files (no need to embed them in the image)
+Dockerfile
+.dockerignore
+docker-compose*.yml

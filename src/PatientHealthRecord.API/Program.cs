@@ -29,8 +29,12 @@ builder.Services.Configure<GlobalSettings>(config.GetSection("GlobalSettings"));
 builder.Services.Configure<JwtSettings>(config.GetSection("JwtSettings"));
 
 // ── Database ──────────────────────────────────────────────────────────
-var connectionString = config.GetConnectionString("Default")
-    ?? throw new InvalidOperationException("Connection string 'Default' not found.");
+// Railway injects DATABASE_URL as a postgresql:// URI; fall back to appsettings for local dev.
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+var connectionString = !string.IsNullOrEmpty(databaseUrl)
+    ? databaseUrl                                      // Npgsql 6+ accepts postgresql:// URIs natively
+    : config.GetConnectionString("Default")
+        ?? throw new InvalidOperationException("Connection string 'Default' not found.");
 
 builder.Services.AddDbContext<PatientHealthRecordDbContext>(options =>
     options.UseNpgsql(connectionString,
@@ -96,6 +100,9 @@ builder.Services.AddRateLimitingPolicies();
 // ── Application Services ──────────────────────────────────────────────
 builder.Services.InitServices(); // From AppBootstrapper
 
+// ── Health Checks (Railway uses /health to detect readiness) ──────────
+builder.Services.AddHealthChecks();
+
 // ── API + OpenAPI ──────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -148,9 +155,10 @@ var app = builder.Build();
 app.UseExceptionHandler(opt => { }); // 1. Global exceptions first
 app.ConfigureOwaspSecurity();         // 2. OWASP security headers
 
-if (app.Environment.IsDevelopment())
+// Swagger — enabled in Development and when explicitly set (e.g. Railway staging)
+if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("ENABLE_SWAGGER") == "true")
 {
-    app.UseSwagger();                 // 3. Swagger - dev only
+    app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Patient Health Record API v1");
@@ -166,6 +174,7 @@ app.UseAuthentication();              // 8. Who are you?
 app.UseAuthorization();               // 9. What can you do?
 app.UseRateLimiter();                 // 10. Rate limit
 app.MapControllers();                 // 11. Endpoints
+app.MapHealthChecks("/health");        // 12. Health probe for Railway
 
 // ── Database initialization ───────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
@@ -173,6 +182,8 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     try
     {
+        var db = services.GetRequiredService<PatientHealthRecordDbContext>();
+        await db.Database.MigrateAsync();   // applies any pending migrations
         await DatabaseSeeder.SeedAsync(services);
         Log.Information("Database seeded successfully");
     }
@@ -185,7 +196,12 @@ using (var scope = app.Services.CreateScope())
 try
 {
     Log.Information("Starting Patient Health Record API");
-    app.Run();
+    // Railway injects PORT; honour it so the reverse proxy can reach the container.
+    var port = Environment.GetEnvironmentVariable("PORT");
+    if (!string.IsNullOrEmpty(port))
+        app.Run($"http://0.0.0.0:{port}");
+    else
+        app.Run();
 }
 catch (Exception ex)
 {

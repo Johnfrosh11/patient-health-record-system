@@ -149,6 +149,11 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
           .AllowAnyHeader()
           .AllowCredentials()));
 
+// ── Bind to Railway-injected PORT before building ────────────────────
+var railwayPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(railwayPort))
+    builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
+
 var app = builder.Build();
 
 // ══ MIDDLEWARE PIPELINE (ORDER IS NON-NEGOTIABLE) ═════════════════════
@@ -176,32 +181,33 @@ app.UseRateLimiter();                 // 10. Rate limit
 app.MapControllers();                 // 11. Endpoints
 app.MapHealthChecks("/health");        // 12. Health probe for Railway
 
-// ── Database initialization ───────────────────────────────────────────
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try
-    {
-        var db = services.GetRequiredService<PatientHealthRecordDbContext>();
-        await db.Database.MigrateAsync();   // applies any pending migrations
-        await DatabaseSeeder.SeedAsync(services);
-        Log.Information("Database seeded successfully");
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "An error occurred while seeding the database");
-    }
-}
-
 try
 {
     Log.Information("Starting Patient Health Record API");
-    // Railway injects PORT; honour it so the reverse proxy can reach the container.
-    var port = Environment.GetEnvironmentVariable("PORT");
-    if (!string.IsNullOrEmpty(port))
-        app.Run($"http://0.0.0.0:{port}");
-    else
-        app.Run();
+
+    // Start listening FIRST — Railway's healthcheck probes /health immediately after
+    // the container starts, so the app must be accepting connections before migrations run.
+    await app.StartAsync();
+
+    // ── Database initialization (app already responding to /health) ───────
+    using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        try
+        {
+            var db = services.GetRequiredService<PatientHealthRecordDbContext>();
+            await db.Database.MigrateAsync();
+            await DatabaseSeeder.SeedAsync(services);
+            Log.Information("Database seeded successfully");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "An error occurred while seeding the database");
+        }
+    }
+
+    // Keep the process alive until a shutdown signal is received.
+    await app.WaitForShutdownAsync();
 }
 catch (Exception ex)
 {

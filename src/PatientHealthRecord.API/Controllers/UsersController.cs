@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PatientHealthRecord.Application.Common.Interfaces;
 using PatientHealthRecord.Application.DTOs.Users;
+using PatientHealthRecord.Application.Services.Users;
 using PatientHealthRecord.Domain.Constants;
 using PatientHealthRecord.Utilities;
 

@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PatientHealthRecord.Application.Common.Interfaces;
+using PatientHealthRecord.Application.Services.Audit;
+using PatientHealthRecord.Domain;
 using PatientHealthRecord.Domain.Constants;
-using PatientHealthRecord.Domain.Enums;
 using PatientHealthRecord.Utilities;
 
 namespace PatientHealthRecord.API.Controllers;

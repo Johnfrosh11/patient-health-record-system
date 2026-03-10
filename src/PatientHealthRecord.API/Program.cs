@@ -173,7 +173,9 @@ if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("ENABL
 
 app.UseRouting();                     // 4. Routing
 app.UseCors();                        // 5. CORS
-app.UseHttpsRedirection();            // 6. HTTPS
+// Railway handles TLS at the edge; skip HTTPS redirection so HTTP health probes are not redirected.
+if (!app.Environment.IsProduction() || Environment.GetEnvironmentVariable("RAILWAY_ENVIRONMENT") == null)
+    app.UseHttpsRedirection();            // 6. HTTPS (local/non-Railway only)
 app.UseSerilogRequestLogging();       // 7. Request logging
 app.UseAuthentication();              // 8. Who are you?
 app.UseAuthorization();               // 9. What can you do?

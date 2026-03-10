@@ -43,10 +43,10 @@ try
     builder.Services.Configure<JwtSettings>(config.GetSection("JwtSettings"));
 
     // ── Database ───────────────────────────────────────────────────────────
-    // Railway injects DATABASE_URL as a postgresql:// URI; fall back to appsettings for local dev.
+    // Railway injects DATABASE_URL as a postgresql:// URI; convert it to key=value format for Npgsql.
     var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
     var connectionString = !string.IsNullOrEmpty(databaseUrl)
-        ? databaseUrl                                      // Npgsql 6+ accepts postgresql:// URIs natively
+        ? ConvertDatabaseUrl(databaseUrl)
         : config.GetConnectionString("Default")
             ?? throw new InvalidOperationException("Connection string 'Default' not found.");
 
@@ -229,4 +229,26 @@ finally
 }
 
 // Make Program class accessible for WebApplicationFactory in integration tests
-public partial class Program { }
+public partial class Program
+{
+    // Converts postgresql://user:pass@host:port/db  →  Host=host;Port=port;Database=db;Username=user;Password=pass
+    static string ConvertDatabaseUrl(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var userInfo = uri.UserInfo.Split(':', 2);
+            var username = Uri.UnescapeDataString(userInfo[0]);
+            var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
+            var host = uri.Host;
+            var port = uri.Port > 0 ? uri.Port : 5432;
+            var database = uri.AbsolutePath.TrimStart('/');
+            return $"Host={host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+        }
+        catch
+        {
+            // Already a key=value string — return as-is
+            return url;
+        }
+    }
+}

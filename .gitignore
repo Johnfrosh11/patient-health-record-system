@@ -72,7 +72,8 @@ _ReSharper*/
 *.db-wal
 
 # Sensitive Data
-appsettings.json
+# appsettings.json is intentionally tracked — it contains only localhost defaults.
+# Real secrets (DATABASE_URL, JWT keys) are injected via environment variables at runtime.
 appsettings.Development.json
 appsettings.Production.json
 *.pfx
